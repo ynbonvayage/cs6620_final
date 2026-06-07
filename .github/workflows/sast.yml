@@ -17,24 +17,24 @@ jobs:
           # Collect JS files and save to temp file
           find . -name "*.js" -not -path "./node_modules/*" | head -5 | xargs cat 2>/dev/null > /tmp/code.js || true
           
-          # Create JSON payload using python (handles escaping properly)
+          # Create JSON payload - send code directly (no extra wrapping)
           python3 -c "
           import json
           with open('/tmp/code.js', 'r') as f:
               code = f.read()
-          payload = {'body': json.dumps({'code': code})}
+          payload = {'code': code}
           print(json.dumps(payload))
           " > /tmp/payload.json
           
-          # Call Lambda with properly escaped payload
+          # Call Lambda
           RESPONSE=$(curl -s -X POST "${{ secrets.AWS_LAMBDA_URL }}" \
             -H "Content-Type: application/json" \
             -d @/tmp/payload.json)
           
           echo "Scan Result: $RESPONSE"
           
-          # Check HIGH severity
-          HIGH=$(echo $RESPONSE | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('summary',{}).get('high',0))" 2>/dev/null || echo "0")
+          # Check HIGH severity - fail loudly if response is malformed
+          HIGH=$(echo $RESPONSE | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['summary']['high'])")
           
           if [ "$HIGH" -gt "0" ]; then
             echo "❌ HIGH severity vulnerabilities found: $HIGH"
