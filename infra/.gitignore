@@ -1,0 +1,9 @@
+.terraform/
+# .terraform.lock.hcl is intentionally committed to pin provider versions
+*.tfstate
+tfplan
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+*.tfplan

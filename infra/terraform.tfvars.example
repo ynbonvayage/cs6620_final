@@ -1,0 +1,13 @@
+# Copy to terraform.tfvars and adjust as needed.
+region        = "us-west-2"
+project       = "securegate"
+env           = "dev"
+instance_type = "t3.micro"
+asg_desired   = 2
+
+# GitHub repo allowed to assume the CI role via OIDC
+github_repo = "secure-gate-org/securegate"
+
+# Set your email to receive HIGH-severity SNS alerts (confirm via email link).
+# Leave blank to skip the subscription.
+alert_email = ""
