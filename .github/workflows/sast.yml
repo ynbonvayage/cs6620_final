@@ -11,9 +11,11 @@ jobs:
     permissions:
       pull-requests: write   # required for gh pr comment to post results
     steps:
-      # Step 1: Check out the code
+      # Step 1: Check out the code — full history needed for git diff to find the merge base.
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # Step 2: Send code to Lambda for scanning and post results as a PR comment
       - name: Run SAST scan
