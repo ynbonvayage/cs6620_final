@@ -8,6 +8,8 @@ on:
 jobs:
   sast-scan:
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write   # required for gh pr comment to post results
     steps:
       # Step 1: Check out the code
       - name: Checkout code
