@@ -21,8 +21,18 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Collect JS files from the repo (excluding node_modules)
-          find . -name "*.js" -not -path "./node_modules/*" | head -5 | xargs cat 2>/dev/null > /tmp/code_raw.txt || true
+          # Collect only JS files added or modified in this PR (differential scan).
+          # --diff-filter=AM: Added + Modified only, ignores deletions.
+          git fetch origin ${{ github.base_ref }} --depth=1
+          git diff --name-only --diff-filter=AM origin/${{ github.base_ref }}...HEAD \
+            | grep '\.js$' | grep -v 'node_modules' | head -10 > /tmp/changed_js.txt
+
+          if [ ! -s /tmp/changed_js.txt ]; then
+            echo "No JS files changed in this PR — skipping scan."
+            exit 0
+          fi
+
+          xargs cat < /tmp/changed_js.txt 2>/dev/null > /tmp/code_raw.txt || true
 
           # jq --arg reads the file content and handles all escaping (quotes, backslashes,
           # newlines, unicode) — no shell interpolation of code content at any point.
