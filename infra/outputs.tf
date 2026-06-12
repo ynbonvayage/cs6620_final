@@ -1,3 +1,12 @@
+output "lambda_function_url" {
+  description = "Set this as the AWS_LAMBDA_URL secret in GitHub repository settings"
+  value       = module.lambda.function_url
+}
+
+output "lambda_function_arn" {
+  value = module.lambda.function_arn
+}
+
 output "vpc_id" {
   value = module.network.vpc_id
 }

@@ -54,6 +54,16 @@ module "iam" {
   failure_topic_arn  = module.data.failure_alerts_topic_arn
 }
 
+module "lambda" {
+  source = "./modules/lambda"
+
+  name           = local.name
+  sast_url       = module.network.alb_dns_name
+  dynamodb_table = module.data.scans_table
+  s3_bucket      = module.data.reports_bucket
+  account_id     = data.aws_caller_identity.current.account_id
+}
+
 module "compute" {
   source = "./modules/compute"
 
