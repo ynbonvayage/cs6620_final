@@ -13,9 +13,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Step 2: Send code to Lambda for scanning
+      # Step 2: Send code to Lambda for scanning and post results as a PR comment
       - name: Run SAST scan
         id: sast
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Collect JS files from the repo (excluding node_modules)
           find . -name "*.js" -not -path "./node_modules/*" | head -5 | xargs cat 2>/dev/null > /tmp/code_raw.txt || true
@@ -37,17 +39,48 @@ jobs:
           # Fail loudly if the response has no summary key (Lambda error, scanner unreachable, etc.)
           # jq -e exits non-zero when the filter result is false/null, so has("summary") is a clean check.
           if ! echo "$RESPONSE" | jq -e 'has("summary")' > /dev/null 2>&1; then
-            echo "❌ Lambda returned an error — pipeline is broken, blocking merge."
-            echo "   Response was: $RESPONSE"
+            echo "Pipeline error — scanner unreachable. Merge blocked."
+            echo "## SAST Scan Results" > /tmp/pr_comment.md
+            echo "" >> /tmp/pr_comment.md
+            echo "**Scanner error** — pipeline failed to complete. Merge blocked." >> /tmp/pr_comment.md
+            echo "" >> /tmp/pr_comment.md
+            echo "Response: $RESPONSE" >> /tmp/pr_comment.md
+            gh pr comment ${{ github.event.pull_request.number }} --body-file /tmp/pr_comment.md
             exit 2
           fi
 
           HIGH=$(echo "$RESPONSE" | jq '.summary.high')
+          MEDIUM=$(echo "$RESPONSE" | jq '.summary.medium')
+          LOW=$(echo "$RESPONSE" | jq '.summary.low')
+          TOTAL=$(echo "$RESPONSE" | jq '.summary.totalVulnerabilities')
+          SCAN_ID=$(echo "$RESPONSE" | jq -r '.scanId')
+
+          # Build comment line by line into a file — avoids YAML flow-map conflicts
+          # that occur with { } group redirects or inline multi-line --body strings.
+          echo "## SAST Scan Results" > /tmp/pr_comment.md
+          echo "" >> /tmp/pr_comment.md
+          echo "| Severity | Count |" >> /tmp/pr_comment.md
+          echo "|----------|-------|" >> /tmp/pr_comment.md
+          echo "| HIGH | $HIGH |" >> /tmp/pr_comment.md
+          echo "| MEDIUM | $MEDIUM |" >> /tmp/pr_comment.md
+          echo "| LOW | $LOW |" >> /tmp/pr_comment.md
+          echo "| **Total** | **$TOTAL** |" >> /tmp/pr_comment.md
+          echo "" >> /tmp/pr_comment.md
+          if [ "$HIGH" -gt "0" ]; then
+            echo "**PR blocked** — HIGH severity vulnerabilities must be fixed before merging." >> /tmp/pr_comment.md
+          else
+            echo "**No HIGH severity vulnerabilities** — PR is clear to merge." >> /tmp/pr_comment.md
+          fi
+          echo "" >> /tmp/pr_comment.md
+          echo "Scan ID: $SCAN_ID" >> /tmp/pr_comment.md
+
+          # Post the comment to the PR — GITHUB_TOKEN is auto-provided, no extra secret needed.
+          gh pr comment ${{ github.event.pull_request.number }} --body-file /tmp/pr_comment.md
 
           # Fail the workflow if HIGH vulnerabilities found
           if [ "$HIGH" -gt "0" ]; then
-            echo "❌ HIGH severity vulnerabilities found: $HIGH"
+            echo "HIGH severity vulnerabilities found: $HIGH"
             exit 1
           else
-            echo "✅ No HIGH severity vulnerabilities found"
+            echo "No HIGH severity vulnerabilities found"
           fi
