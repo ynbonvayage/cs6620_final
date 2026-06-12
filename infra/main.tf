@@ -11,10 +11,6 @@ data "aws_caller_identity" "current" {}
 
 data "aws_partition" "current" {}
 
-# Always pull the latest Amazon Linux 2023 AMI instead of hardcoding an id.
-data "aws_ssm_parameter" "al2023" {
-  name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
-}
 
 locals {
   name = "${var.project}-${var.env}"
@@ -69,7 +65,7 @@ module "compute" {
 
   name          = local.name
   env           = var.env
-  ami_id        = data.aws_ssm_parameter.al2023.value
+  ami_id        = var.ami_id
   instance_type = var.instance_type
   asg_desired   = var.asg_desired
   asg_min       = var.asg_min

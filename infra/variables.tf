@@ -40,6 +40,12 @@ variable "private_subnet_cidrs" {
   default     = ["10.0.10.0/24", "10.0.11.0/24"]
 }
 
+variable "ami_id" {
+  description = "Amazon Linux 2023 AMI for us-east-1. Learner Lab blocks both ssm:GetParameter and ec2:DescribeImages so this must be hardcoded. Find a fresh ID at: https://us-east-1.console.aws.amazon.com/ec2/home?region=us-east-1#AMICatalog"
+  type        = string
+  default     = "ami-0c7217cdde317cfec"
+}
+
 variable "instance_type" {
   description = "EC2 instance type for the scanner fleet"
   type        = string

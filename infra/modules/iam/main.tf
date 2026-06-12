@@ -7,10 +7,10 @@
 # create_iam = true to provision the least-privilege role + GitHub OIDC instead.
 ###############################################################################
 
-data "aws_iam_instance_profile" "lab" {
-  count = var.create_iam ? 0 : 1
-  name  = var.lab_instance_profile
-}
+# iam:GetInstanceProfile is denied in Learner Lab; construct the ARN directly
+# using the caller identity instead of a data source lookup.
+data "aws_caller_identity" "current" {}
+
 
 # ---------- EC2 instance role (only when create_iam = true) ----------
 
@@ -124,5 +124,5 @@ resource "aws_iam_role_policy" "github_ci" {
 }
 
 locals {
-  instance_profile_arn = var.create_iam ? aws_iam_instance_profile.instance[0].arn : data.aws_iam_instance_profile.lab[0].arn
+  instance_profile_arn = var.create_iam ? aws_iam_instance_profile.instance[0].arn : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:instance-profile/${var.lab_instance_profile}"
 }
