@@ -18,18 +18,32 @@ jobs:
         id: sast
         run: |
           # Collect JS files from the repo (excluding node_modules)
-          CODE=$(find . -name "*.js" -not -path "./node_modules/*" | head -5 | xargs cat 2>/dev/null || echo "")
-          
-          # Call Lambda Function URL with the code
+          find . -name "*.js" -not -path "./node_modules/*" | head -5 | xargs cat 2>/dev/null > /tmp/code_raw.txt || true
+
+          # jq --arg reads the file content and handles all escaping (quotes, backslashes,
+          # newlines, unicode) — no shell interpolation of code content at any point.
+          jq -n \
+            --arg code "$(cat /tmp/code_raw.txt)" \
+            --arg repo "${{ github.repository }}" \
+            '{"code": $code, "filename": "scan.js", "repo": $repo}' > /tmp/payload.json
+
+          # Send payload from file — curl -d @file never mangles the content
           RESPONSE=$(curl -s -X POST "${{ secrets.AWS_LAMBDA_URL }}" \
             -H "Content-Type: application/json" \
-            -d "{\"body\": \"{\\\"code\\\": \\\"$(echo $CODE | sed 's/"/\\"/g' | tr -d '\n')\\\"}\"}") 
-          
+            -d @/tmp/payload.json)
+
           echo "Scan Result: $RESPONSE"
-          
-          # Check if HIGH severity vulnerabilities exist
-          HIGH=$(echo $RESPONSE | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('summary',{}).get('high',0))" 2>/dev/null || echo "0")
-          
+
+          # Fail loudly if the response has no summary key (Lambda error, scanner unreachable, etc.)
+          # jq -e exits non-zero when the filter result is false/null, so has("summary") is a clean check.
+          if ! echo "$RESPONSE" | jq -e 'has("summary")' > /dev/null 2>&1; then
+            echo "❌ Lambda returned an error — pipeline is broken, blocking merge."
+            echo "   Response was: $RESPONSE"
+            exit 2
+          fi
+
+          HIGH=$(echo "$RESPONSE" | jq '.summary.high')
+
           # Fail the workflow if HIGH vulnerabilities found
           if [ "$HIGH" -gt "0" ]; then
             echo "❌ HIGH severity vulnerabilities found: $HIGH"
