@@ -1,29 +1,38 @@
 #!/bin/bash
 set -euxo pipefail
 
-# Amazon Linux 2023 bootstrap for a SecureGate scanner node.
-# In production the SAST scanner Docker image is pulled here; for the infra
-# milestone we run a tiny nginx so the ALB target group reports healthy and
-# the load balancer DNS returns a live response.
+# Amazon Linux 2023 bootstrap for a SecureGate ${service} node.
+# Clones the repo over NAT egress and runs the Node.js SAST backend as a
+# systemd service on port ${app_port}. The ALB target group health-checks
+# GET /health on this port, which the scanner serves with a 200.
 
-# Note: skip "dnf update -y" on boot — it can take minutes and push nginx past
-# the ALB health-check grace window, causing the ASG to recycle the instance.
-dnf install -y nginx
+# Note: skip "dnf update -y" on boot — it can take minutes and push the app
+# past the ALB health-check grace window, causing the ASG to recycle the node.
+dnf install -y git nodejs npm
 
-# /health endpoint for the ALB target group health check
-echo "ok" > /usr/share/nginx/html/health
+# Pull the application source.
+git clone ${repo_url} /opt/securegate
+cd /opt/securegate/sast/backend
+npm install --production
 
-cat > /usr/share/nginx/html/index.html <<'HTML'
-<!doctype html>
-<html>
-  <head><title>SecureGate ${service}</title></head>
-  <body style="font-family: sans-serif">
-    <h1>SecureGate &mdash; ${service} node</h1>
-    <p>Provisioned by Terraform. Infrastructure owner: Rong Huang (Group 03).</p>
-    <p>Environment: ${env}</p>
-  </body>
-</html>
-HTML
+# Run the scanner as a managed service so it restarts on crash/reboot.
+cat > /etc/systemd/system/securegate-scanner.service <<UNIT
+[Unit]
+Description=SecureGate SAST scanner (${env})
+After=network-online.target
+Wants=network-online.target
 
-systemctl enable nginx
-systemctl start nginx
+[Service]
+WorkingDirectory=/opt/securegate/sast/backend
+Environment=PORT=${app_port}
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+systemctl daemon-reload
+systemctl enable securegate-scanner
+systemctl start securegate-scanner

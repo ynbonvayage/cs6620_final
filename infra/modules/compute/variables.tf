@@ -31,6 +31,11 @@ variable "app_port" {
   type = number
 }
 
+variable "repo_url" {
+  description = "Git URL the scanner instances clone to run the SAST backend"
+  type        = string
+}
+
 variable "private_subnet_ids" {
   type = list(string)
 }

@@ -14,8 +14,10 @@ resource "aws_launch_template" "scanner" {
   vpc_security_group_ids = [var.instance_sg_id]
 
   user_data = base64encode(templatefile("${path.module}/user_data.sh.tpl", {
-    service = "SAST scanner"
-    env     = var.env
+    service  = "SAST scanner"
+    env      = var.env
+    app_port = var.app_port
+    repo_url = var.repo_url
   }))
 
   metadata_options {

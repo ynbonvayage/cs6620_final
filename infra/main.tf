@@ -65,6 +65,7 @@ module "compute" {
   asg_min       = var.asg_min
   asg_max       = var.asg_max
   app_port      = var.app_port
+  repo_url      = var.repo_url
 
   private_subnet_ids   = module.network.private_subnet_ids
   instance_sg_id       = module.network.instance_sg_id

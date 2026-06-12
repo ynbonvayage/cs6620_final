@@ -67,7 +67,13 @@ variable "asg_max" {
 variable "app_port" {
   description = "Port the scanner service listens on inside each instance"
   type        = number
-  default     = 80
+  default     = 3000
+}
+
+variable "repo_url" {
+  description = "Git URL the scanner instances clone to run the SAST backend"
+  type        = string
+  default     = "https://github.com/ynbonvayage/cs6620_final.git"
 }
 
 variable "github_repo" {
