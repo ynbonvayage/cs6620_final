@@ -1,62 +1,181 @@
-# SecureGate · Cloud Security Platform
+# SecureGate — Automated SAST Pipeline on AWS
 
-> CS6620 Cloud Computing · Spring 2026 Final Project
-> An automated SAST (Static Application Security Testing) pipeline deployed on AWS that scans every pull request and blocks merges containing HIGH severity vulnerabilities.
+> CS6620 Cloud Computing · Summer 2026 · Group 03
 
----
-
-## What this project does
-
-When a developer opens a pull request, the source code is automatically scanned for security vulnerabilities such as hardcoded secrets, SQL injection patterns, weak cryptography, and insecure functions. If any HIGH severity issues are detected, the workflow fails and the PR cannot be merged into `main`. Scan history and full reports are persisted for later review and monitoring.
-
-Security becomes a **continuous, automatic check** built into the development workflow — not a manual review step that gets skipped under deadline pressure.
+An automated Static Application Security Testing (SAST) pipeline that scans every pull request and **blocks merges** if HIGH severity vulnerabilities are found.
 
 ---
 
-## Architecture
+## How it works
 
 ```
 Developer opens PR
-        │
-        ▼   pull_request trigger
+       │
+       ▼  pull_request trigger
 GitHub Actions  (.github/workflows/sast.yml)
-        │
-        │   curl POST (jq-built JSON payload)
-        ▼
+       │  differential scan: only JS files changed in this PR
+       │  curl POST (jq-built JSON payload)
+       ▼
 API Gateway v2 (HTTP API)
-        │
-        ▼
-AWS Lambda · securegate-dev-sast-handler
-        │
-        │   HTTP POST /scan/code
-        ▼
-Application Load Balancer
-        │
-        ▼
-Auto Scaling Group · EC2 SAST Scanner (private subnets, multi-AZ)
-        │
-        │   scan results
-        ▼
-Lambda persists in parallel:
-        ├──► DynamoDB · securegate-dev-scans       (metadata, fast queries)
-        └──► S3       · securegate-dev-reports-*   (full JSON reports)
-        │
-        │   returns summary
-        ▼
-GitHub Actions checks summary.high
-        ├─ high == 0 → workflow passes → PR can merge
-        └─ high  > 0 → workflow fails  → PR merge blocked by branch protection
+       │
+       ▼
+AWS Lambda  (Node.js 20)
+       │  HTTP POST /scan/code
+       ▼
+ALB → EC2 Auto Scaling Group  (SAST scanner, private subnets, multi-AZ)
+       │
+       ▼
+Lambda writes results:
+       ├──► DynamoDB  securegate-dev-scans     (scan metadata, queryable by repo)
+       └──► S3        securegate-dev-reports-* (full JSON reports)
+       │
+       ▼
+GitHub Actions posts PR comment with severity table
+       ├─ HIGH == 0 → workflow passes → PR can merge
+       └─ HIGH  > 0 → workflow fails  → PR merge blocked
 ```
 
 ---
 
-## Team & responsibilities
+## Member A — Na Yin (SAST Pipeline)
 
-| Member | Owns | Key components |
-|--------|------|----------------|
-| **A — Na Yin** | SAST automation pipeline | Lambda orchestrator, GitHub Actions workflow, API Gateway integration |
-| **B — Rong Huang** | Infrastructure & IaC | VPC, ALB, ASG, IAM roles, all Terraform main structure |
-| **C — TBD** | Data layer + Portal + Monitoring | DynamoDB/S3 schema, Portal frontend/backend, CloudWatch + SNS alerts |
+### Lambda Orchestrator (`lambda/sast-handler/index.mjs`)
+- Receives scan requests from GitHub Actions via API Gateway
+- Forwards code to the SAST scanner running on EC2 behind ALB
+- Persists results: DynamoDB (`scan_id` PK) + S3 (`reports/{repo}/{scanId}.json`)
+- Returns `{ scanId, createdAt, summary: { high, medium, low, totalVulnerabilities } }`
+
+### API Gateway v2 (`infra/modules/lambda/`)
+- HTTP API fronting the Lambda function
+- Replaces Lambda Function URL (AWS Academy SCP blocks `lambda:InvokeFunctionUrl` from outside AWS networks)
+
+### GitHub Actions Workflow (`.github/workflows/sast.yml`)
+- Triggers on every PR to `main`
+- **Differential scan**: only scans JS files added or modified in the PR (`git diff --diff-filter=AM`)
+- Posts scan results as a PR comment (severity table + scan ID)
+- Exits 1 (blocks merge) if `HIGH > 0`
+- Exits 2 (blocks merge) if scanner is unreachable
+- Exits 0 (passes) if no HIGH findings or no JS changes
+
+### Data Design (`infra/modules/data/`)
+- DynamoDB `scans` table: `scan_id` partition key + GSI `repo-created_at-index` for querying latest scans per repo
+- S3 reports bucket: AES256 encryption, versioning enabled, Glacier transition after 30 days, auto-delete after 365 days
+
+### CloudWatch Alarm (`infra/modules/data/`)
+- Monitors `HealthyHostCount < 1` — fires only when **all** EC2 instances are unhealthy (service completely down)
+- Triggers SNS `failure-alerts` topic → email notification
+
+---
+
+## Deploy
+
+### Prerequisites
+
+- AWS Academy Learner Lab (or any AWS account with `LabRole` / `LabInstanceProfile`)
+- Terraform ≥ 1.5
+- AWS CLI + GitHub CLI (`gh`)
+
+### Steps
+
+```bash
+# 1. Clone
+git clone https://github.com/ynbonvayage/cs6620_final
+cd cs6620_final
+
+# 2. Set AWS credentials (refresh from Learner Lab → AWS Details every ~4 hours)
+export AWS_ACCESS_KEY_ID="ASIA..."
+export AWS_SECRET_ACCESS_KEY="..."
+export AWS_SESSION_TOKEN="..."
+
+# 3. Configure
+cd infra
+# Edit terraform.tfvars — set your alert_email
+vi terraform.tfvars
+
+# 4. Deploy
+terraform init
+terraform apply
+
+# 5. Set GitHub secret for the workflow
+gh secret set AWS_LAMBDA_URL \
+  --body "$(terraform output -raw lambda_function_url)" \
+  --repo <your-fork>
+
+# 6. Confirm SNS subscription email (check inbox for "AWS Notification - Subscription Confirmation")
+```
+
+### Verify
+
+```bash
+# Hit the Lambda directly
+curl -s -X POST "$(terraform output -raw lambda_function_url)" \
+  -H "Content-Type: application/json" \
+  -d '{"code":"const p=\"admin123\";","filename":"test.js","repo":"smoke-test"}' \
+  | python3 -m json.tool
+# Expected: scanId + summary.high >= 1
+```
+
+### Tear down
+
+```bash
+# Empty the versioned S3 bucket first (replace bucket name from terraform output)
+~/miniconda3/bin/python3 - <<'EOF'
+import boto3, subprocess
+bucket = subprocess.check_output(
+    ["terraform","output","-raw","reports_bucket"], text=True).strip()
+s3 = boto3.client('s3')
+paginator = s3.get_paginator('list_object_versions')
+for page in paginator.paginate(Bucket=bucket):
+    objects = [{'Key': v['Key'], 'VersionId': v['VersionId']}
+               for v in page.get('Versions', []) + page.get('DeleteMarkers', [])]
+    if objects:
+        s3.delete_objects(Bucket=bucket, Delete={'Objects': objects})
+print("Bucket cleared")
+EOF
+
+terraform destroy
+```
+
+---
+
+## Test the merge gate
+
+```bash
+# Should be BLOCKED (HIGH vulnerabilities)
+git checkout -b test/blocked
+echo 'const secret = "hardcoded_password_123"; eval(userInput);' > test.js
+git add test.js && git commit -m "test: vulnerable code"
+git push origin test/blocked
+gh pr create --title "Test blocked" --base main
+
+# Should PASS (clean code)
+git checkout -b test/clean
+echo 'console.log("hello world");' > test.js
+git add test.js && git commit -m "test: clean code"
+git push origin test/clean
+gh pr create --title "Test clean" --base main
+```
+
+---
+
+## Infrastructure overview (Member B — Rong Huang)
+
+| Module | Resources |
+|--------|-----------|
+| `network` | VPC (10.0.0.0/16), 2 public + 2 private subnets across 2 AZs, IGW, single NAT Gateway, ALB (internet-facing, port 80), Target Group (port 3000), security groups |
+| `compute` | Launch template (Amazon Linux 2023, IMDSv2), Auto Scaling Group (desired 2, min 1, max 3), rolling instance refresh |
+| `iam` | Uses pre-provisioned `LabInstanceProfile` (Academy blocks `iam:CreateRole`) |
+| `data` | DynamoDB tables (`scans`, `repos`), S3 reports bucket, SNS `vuln-alerts` + `failure-alerts` topics |
+
+---
+
+## AWS Academy Learner Lab notes
+
+- **AMI hardcoded**: `ami-0521cb2d60cfbb1a6` (AL2023, us-east-1) — `ec2:DescribeImages` and `ssm:GetParameter` are blocked
+- **No IAM role creation**: all resources use `LabRole` / `LabInstanceProfile`
+- **Credentials expire every ~4 hours**: re-export from Learner Lab → AWS Details; `voc-cancel-cred` explicit deny means credentials are revoked
+- **Terraform refresh blocked**: use `terraform apply -refresh=false` when read APIs are denied
+- **Lambda Function URL blocked**: SCP denies `lambda:InvokeFunctionUrl` from outside AWS; use API Gateway v2 instead
 
 ---
 
@@ -64,160 +183,17 @@ GitHub Actions checks summary.high
 
 ```
 cs6620_final/
-├── .github/
-│   └── workflows/
-│       └── sast.yml              # GitHub Actions: triggers scan on every PR
-├── infra/                        # Terraform Infrastructure as Code
-│   ├── main.tf                   # Root module wiring
-│   ├── outputs.tf                # Exposes ALB DNS, table names, Lambda URL, etc.
-│   ├── variables.tf
-│   ├── versions.tf
-│   ├── terraform.tfvars          # (gitignored) Local overrides
-│   ├── terraform.tfvars.example  # Template for new contributors
+├── .github/workflows/sast.yml     # A · SAST pipeline (differential scan + PR comment)
+├── lambda/sast-handler/index.mjs  # A · Lambda orchestrator
+├── infra/
+│   ├── main.tf                    # Root module wiring
+│   ├── terraform.tfvars           # Local config (alert_email, etc.)
 │   └── modules/
-│       ├── network/              # B · VPC, subnets, ALB, NAT, security groups
-│       ├── compute/              # B · Launch template, ASG running SAST scanner
-│       ├── data/                 # B · DynamoDB tables, S3 bucket, SNS topics
-│       ├── iam/                  # B · IAM helpers (uses LabRole in Academy)
-│       └── lambda/               # A · Lambda function + API Gateway v2
-├── lambda/
-│   └── sast-handler/
-│       └── index.mjs             # A · Lambda source — orchestrates scan & persistence
-├── sast/
-│   └── backend/                  # SAST scanner (Node.js Express + regex rules)
-│       ├── server.js
-│       ├── scanner.js
-│       └── package.json
-├── HANDOFF_TO_C.md               # Handoff doc explaining DynamoDB schema, S3 keys, etc.
-└── README.md                     # This file
+│       ├── network/               # B · VPC, ALB, NAT, security groups
+│       ├── compute/               # B · ASG, launch template, user_data
+│       ├── iam/                   # B · LabRole / LabInstanceProfile
+│       ├── data/                  # A+B · DynamoDB, S3, SNS, CloudWatch alarm
+│       └── lambda/                # A · Lambda + API Gateway v2
+├── sast/backend/                  # SAST scanner (Node.js, Docker image: yinnalucky/securegate-sast)
+└── infra/study/architecture-review.html  # Study guide for mock interview
 ```
-
----
-
-## Deployment (clean account)
-
-### Prerequisites
-
-- AWS Academy Learner Lab access (or any AWS account where `LabRole` exists)
-- Terraform ≥ 1.5
-- AWS CLI configured with valid credentials
-
-### One-command deploy
-
-```bash
-# 1. Set AWS credentials (from Learner Lab → AWS Details → AWS CLI)
-export AWS_ACCESS_KEY_ID="ASIA..."
-export AWS_SECRET_ACCESS_KEY="..."
-export AWS_SESSION_TOKEN="..."
-
-# 2. Deploy all infrastructure
-cd infra
-terraform init
-terraform apply
-
-# 3. Get the API Gateway URL
-terraform output lambda_function_url
-
-# 4. Set the GitHub secret
-gh secret set AWS_LAMBDA_URL \
-  --body "$(terraform output -raw lambda_function_url)" \
-  --repo <your-fork>
-```
-
-### Verify
-
-```bash
-URL=$(terraform output -raw lambda_function_url)
-curl -s -X POST "$URL" \
-  -H "Content-Type: application/json" \
-  -d '{"code": "const password = \"admin123\";", "filename": "test.js", "repo": "smoke-test"}' \
-  | python3 -m json.tool
-```
-
-Expected: response includes a `scanId` and `summary.high >= 1`.
-
----
-
-## How to test the merge gate
-
-```bash
-git checkout -b test-vuln
-echo 'const password = "admin123";' > vuln.js
-git add vuln.js
-git commit -m "test: try to merge vulnerable code"
-git push origin test-vuln
-```
-
-Open a PR for `test-vuln` → `main`. The SAST workflow runs automatically. Because the file contains a HIGH severity finding, the workflow fails and the **Merge** button is disabled by branch protection.
-
----
-
-## Tech stack
-
-- **IaC**: Terraform 1.5+
-- **Compute**: AWS Lambda (Node.js 20), EC2 ASG behind ALB
-- **API**: API Gateway v2 (HTTP API)
-- **Storage**: DynamoDB (scan metadata), S3 (full reports)
-- **Notifications**: SNS topics (provisioned, integration in progress — see HANDOFF_TO_C.md)
-- **CI**: GitHub Actions, `jq` for safe JSON construction
-- **Auth**: AWS Academy `LabRole` (IAM creation blocked in Academy environment)
-
----
-
-## Vulnerability types detected
-
-The SAST scanner uses regex pattern matching to detect 10 categories:
-
-- Hardcoded secrets (API keys, passwords, tokens)
-- SQL injection patterns
-- NoSQL injection patterns
-- Cross-site scripting (XSS)
-- Path traversal
-- Insecure functions (`eval`, `exec`)
-- Hardcoded IP addresses
-- Weak randomness (`Math.random()` for security)
-- Sensitive data in logs
-- Weak cryptography (MD5, SHA1)
-
----
-
-## What's done vs what's planned
-
-| Area | Status |
-|------|--------|
-| Containerized SAST scanner | ✅ Running on EC2 ASG in private subnets |
-| ALB in front of scanner | ✅ Multi-AZ, internet-facing |
-| Lambda orchestrator | ✅ Terraform-managed, API Gateway frontend |
-| DynamoDB persistence | ✅ Metadata writes, `scan_id` partition key |
-| S3 persistence | ✅ Full JSON reports, key format `reports/{repo}/{scan_id}.json` |
-| GitHub Actions workflow | ✅ jq-built payload, fail-loud error handling |
-| Branch protection rule | ✅ `sast-scan` required for `main` |
-| SNS publish on HIGH | 🟡 Topic provisioned, Lambda integration pending (see HANDOFF_TO_C.md) |
-| Portal (scan history + detail) | 🟡 Member C scope |
-| CloudWatch dashboard | 🟡 Member C scope |
-| GitHub OIDC for AWS auth | ⏳ Blocked by Academy IAM restrictions |
-| PR comment with vuln details | ⏳ M2 stretch goal |
-
----
-
-## Known limitations
-
-- **AWS Academy IAM**: `iam:CreateRole` is blocked, so all components use the shared `LabRole`. In a production deployment we would create least-privilege roles per component.
-- **AWS Academy SCP on Lambda Function URLs**: External calls to Function URLs get 403 even with public auth. We use API Gateway v2 instead — this is the recommended path anyway for production.
-- **`repo` field defaults to `"unknown"`**: The GitHub Actions workflow doesn't yet pass `github.repository` to the Lambda. Easy fix in `sast.yml`.
-
----
-
-## References
-
-- Member C handoff guide: [`HANDOFF_TO_C.md`](./HANDOFF_TO_C.md)
-- Lambda source: [`lambda/sast-handler/index.mjs`](./lambda/sast-handler/index.mjs)
-- Workflow: [`.github/workflows/sast.yml`](./.github/workflows/sast.yml)
-- Terraform outputs (live values): `cd infra && terraform output`
-
----
-
-## Credits
-
-- **Original SAST scanner**: forked from `aanchan/cs6620` (course material)
-- **Cloud architecture**: Members A, B, C of Team SecureGate, Spring 2026
