@@ -129,3 +129,43 @@ resource "aws_sns_topic_subscription" "vuln_email" {
   protocol  = "email"
   endpoint  = var.alert_email
 }
+
+resource "aws_sns_topic_subscription" "failure_email" {
+  count     = var.alert_email == "" ? 0 : 1
+  topic_arn = aws_sns_topic.failure_alerts.arn
+  protocol  = "email"
+  endpoint  = var.alert_email
+}
+
+###############################################################################
+# CloudWatch alarm: fires when any EC2 target is unhealthy in the ALB TG
+###############################################################################
+
+locals {
+  # CloudWatch dimensions use the suffix of the ARN after the last colon.
+  tg_dimension  = element(split(":", var.target_group_arn), length(split(":", var.target_group_arn)) - 1)
+  alb_dimension = replace(element(split(":", var.alb_arn), length(split(":", var.alb_arn)) - 1), "loadbalancer/", "")
+}
+
+resource "aws_cloudwatch_metric_alarm" "unhealthy_hosts" {
+  alarm_name          = "${var.name}-unhealthy-hosts"
+  alarm_description   = "All SAST scanner EC2 targets are unhealthy — service is completely down."
+  namespace           = "AWS/ApplicationELB"
+  metric_name         = "HealthyHostCount"
+  statistic           = "Minimum"
+  period              = 60
+  evaluation_periods  = 2
+  threshold           = 1
+  comparison_operator = "LessThanThreshold"
+  treat_missing_data  = "breaching"
+
+  dimensions = {
+    TargetGroup  = local.tg_dimension
+    LoadBalancer = local.alb_dimension
+  }
+
+  alarm_actions = [aws_sns_topic.failure_alerts.arn]
+  ok_actions    = [aws_sns_topic.failure_alerts.arn]
+
+  tags = { Name = "${var.name}-unhealthy-hosts" }
+}

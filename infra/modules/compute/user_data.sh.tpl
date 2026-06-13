@@ -1,38 +1,37 @@
 #!/bin/bash
+# Redirect all output to a log file for post-boot troubleshooting.
+exec > >(tee /var/log/sast-bootstrap.log) 2>&1
 set -euxo pipefail
 
-# Amazon Linux 2023 bootstrap for a SecureGate ${service} node.
-# Clones the repo over NAT egress and runs the Node.js SAST backend as a
-# systemd service on port ${app_port}. The ALB target group health-checks
+# Amazon Linux 2023 bootstrap for a SecureGate ${env} node.
+# Pulls a pre-built Docker image from Docker Hub and runs the SAST scanner
+# as a container on port ${app_port}. The ALB target group health-checks
 # GET /health on this port, which the scanner serves with a 200.
 
-# Note: skip "dnf update -y" on boot — it can take minutes and push the app
-# past the ALB health-check grace window, causing the ASG to recycle the node.
-dnf install -y git nodejs npm
+# Install and start Docker — AL2023 uses dnf.
+dnf install -y docker
+systemctl start docker
+systemctl enable docker
 
-# Pull the application source.
-git clone ${repo_url} /opt/securegate
-cd /opt/securegate/sast/backend
-npm install --production
+# Pull the pre-built SAST scanner image from Docker Hub.
+docker pull yinnalucky/securegate-sast:latest
 
-# Run the scanner as a managed service so it restarts on crash/reboot.
-cat > /etc/systemd/system/securegate-scanner.service <<UNIT
-[Unit]
-Description=SecureGate SAST scanner (${env})
-After=network-online.target
-Wants=network-online.target
+# Run the container — restart always so it survives crashes and reboots.
+docker run -d \
+  --name sast-scanner \
+  --restart always \
+  -p ${app_port}:3000 \
+  yinnalucky/securegate-sast:latest
 
-[Service]
-WorkingDirectory=/opt/securegate/sast/backend
-Environment=PORT=${app_port}
-ExecStart=/usr/bin/node server.js
-Restart=always
-RestartSec=5
+# Health check — poll up to 10 times (50s total) before failing the bootstrap.
+for i in 1 2 3 4 5 6 7 8 9 10; do
+  if curl -sf http://localhost:${app_port}/health > /dev/null; then
+    echo "Health check passed on attempt $i"
+    exit 0
+  fi
+  echo "Attempt $i: not ready yet, waiting 5s..."
+  sleep 5
+done
 
-[Install]
-WantedBy=multi-user.target
-UNIT
-
-systemctl daemon-reload
-systemctl enable securegate-scanner
-systemctl start securegate-scanner
+echo "ERROR: scanner did not become healthy after 50s" >&2
+exit 1

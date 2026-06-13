@@ -55,7 +55,7 @@ resource "aws_autoscaling_group" "scanner" {
 
   launch_template {
     id      = aws_launch_template.scanner.id
-    version = "$Latest"
+    version = aws_launch_template.scanner.latest_version
   }
 
   tag {

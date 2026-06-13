@@ -19,8 +19,10 @@ locals {
 module "data" {
   source = "./modules/data"
 
-  name        = local.name
-  alert_email = var.alert_email
+  name             = local.name
+  alert_email      = var.alert_email
+  target_group_arn = module.network.target_group_arn
+  alb_arn          = module.network.alb_arn
 }
 
 module "network" {
