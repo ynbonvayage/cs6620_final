@@ -65,6 +65,20 @@ GitHub Actions posts PR comment with severity table
 - Monitors `HealthyHostCount < 1` — fires only when **all** EC2 instances are unhealthy (service completely down)
 - Triggers SNS `failure-alerts` topic → email notification
 
+
+---
+
+## Frontend Dashboard
+
+A premium, glassmorphism dark-themed dashboard is hosted on S3 to visualize scan history.
+
+- **Dashboard URL**: [http://securegate-dev-frontend-1ee45719.s3-website-us-east-1.amazonaws.com](http://securegate-dev-frontend-1ee45719.s3-website-us-east-1.amazonaws.com)
+- **Data Privacy & Isolation (Option A)**:
+  - The dashboard enforces isolation and requires a `repo` parameter in the URL (e.g., `?repo=your-org/your-repo`) or typing the repository in the search box to view logs.
+  - Direct full table scans of the database are blocked at the Lambda API level to protect repository data privacy (returning `400 Bad Request` if the `repo` parameter is missing).
+- **PR Direct Link**:
+  - GitHub Actions dynamically posts a direct, pre-filtered link on each PR page, allowing developers to review their full report history in one click.
+
 ---
 
 ## Deploy

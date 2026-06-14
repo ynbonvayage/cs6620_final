@@ -55,3 +55,18 @@ output "vuln_alerts_topic_arn" {
 output "failure_alerts_topic_arn" {
   value = module.data.failure_alerts_topic_arn
 }
+
+output "dashboard_url" {
+  description = "Frontend dashboard URL — open in browser to view scan logs"
+  value       = "http://${module.dashboard.frontend_website_url}"
+}
+
+output "dashboard_api_url" {
+  description = "Dashboard API base URL (same API Gateway as SAST handler)"
+  value       = module.lambda.function_url
+}
+
+output "frontend_bucket" {
+  description = "S3 bucket to upload frontend files to"
+  value       = module.dashboard.frontend_bucket
+}

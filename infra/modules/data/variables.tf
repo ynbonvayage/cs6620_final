@@ -17,3 +17,9 @@ variable "alb_arn" {
   description = "ARN of the Application Load Balancer — used for UnHealthyHostCount alarm"
   type        = string
 }
+
+variable "lambda_function_name" {
+  description = "Name of the SAST Lambda function — used for CloudWatch error alarm"
+  type        = string
+}
+
