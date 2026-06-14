@@ -110,7 +110,7 @@ async function loadScans() {
 
 async function loadReport(scanId) {
   openModal(`Report — ${scanId.substring(0, 8)}…`);
-  $modalBody.innerHTML = `<div class="loading-spinner"></div><span style="margin-left:8px;color:var(--text-muted)">Loading full report from S3…</span>`;
+  $modalBody.innerHTML="" + `<div class="loading-spinner"></div><span style="margin-left:8px;color:var(--text-muted)">Loading full report from S3…</span>`;
 
   try {
     const res = await fetch(`${API_BASE_URL}/api/reports/${scanId}`);
@@ -120,7 +120,7 @@ async function loadReport(scanId) {
     renderReport(data.report);
   } catch (err) {
     console.error("Failed to load report:", err);
-    $modalBody.innerHTML = `<div class="empty-state"><p>Failed to load report: ${escapeHtml(err.message)}</p></div>`;
+    $modalBody.innerHTML="" + `<div class="empty-state"><p>Failed to load report: ${escapeHtml(err.message)}</p></div>`;
     showToast(`Failed to load report: ${err.message}`, "error");
   }
 }
@@ -128,7 +128,7 @@ async function loadReport(scanId) {
 // ─── Rendering ──────────────────────────────────────────────────────────────
 
 function renderLoading() {
-  $tbody.innerHTML = `
+  $tbody.innerHTML="" + `
     <tr class="loading-row">
       <td colspan="10">
         <div class="loading-spinner"></div>
@@ -139,7 +139,7 @@ function renderLoading() {
 
 function renderEmpty(message) {
   $scanCount.textContent = "";
-  $tbody.innerHTML = `
+  $tbody.innerHTML="" + `
     <tr>
       <td colspan="10" class="empty-state">
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -159,7 +159,7 @@ function renderScans(items) {
 
   $scanCount.textContent = `${items.length} scan${items.length !== 1 ? "s" : ""}`;
 
-  $tbody.innerHTML = items.map((scan) => {
+  $tbody.innerHTML="" + items.map((scan) => {
     const hasHigh = (scan.high || 0) > 0;
     const statusClass = hasHigh ? "status-fail" : "status-pass";
     const statusText = hasHigh ? "FAIL" : "PASS";
@@ -192,7 +192,7 @@ function renderScans(items) {
 
 function renderReport(report) {
   if (!report) {
-    $modalBody.innerHTML = `<div class="empty-state"><p>Report data is empty.</p></div>`;
+    $modalBody.innerHTML="" + `<div class="empty-state"><p>Report data is empty.</p></div>`;
     return;
   }
 
@@ -258,7 +258,7 @@ function renderReport(report) {
     html += `</div>`;
   }
 
-  $modalBody.innerHTML = html;
+  $modalBody.innerHTML="" + html;
 }
 
 // ─── Stats ──────────────────────────────────────────────────────────────────
