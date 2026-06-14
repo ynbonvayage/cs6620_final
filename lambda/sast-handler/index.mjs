@@ -19,7 +19,7 @@ export const handler = async (event) => {
     return respond(400, { error: "Invalid JSON body" });
   }
 
-  const { code, filename = "untitled.js", repo = "unknown" } = body;
+  const { code, filename = "untitled.js", repo = "unknown", actor = "unknown" } = body;
 
   if (!code) {
     return respond(400, { error: "Missing required field: code" });
@@ -115,6 +115,7 @@ export const handler = async (event) => {
           `Repo: ${repo}\n` +
           `Scan ID: ${scanId}\n` +
           `Filename: ${filename}\n` +
+          `PR Author: ${actor}\n` +
           `Created At: ${createdAt}\n\n` +
           `--- Severity Summary ---\n` +
           `HIGH:   ${summary.high}\n` +
@@ -123,8 +124,14 @@ export const handler = async (event) => {
           `TOTAL:  ${summary.totalVulnerabilities}\n\n` +
           `View full report in S3: s3://${S3_BUCKET}/reports/${repo}/${scanId}.json` +
           dashboardLink,
+        MessageAttributes: {
+          pr_author: {
+            DataType: "String",
+            StringValue: actor,
+          },
+        },
       }));
-      console.log("Vulnerability alert sent to SNS");
+      console.log("Vulnerability alert sent to SNS with MessageAttributes");
     } catch (snsErr) {
       // SNS publish failure should not block the scan response
       console.error("Failed to publish vulnerability alert:", snsErr.message);

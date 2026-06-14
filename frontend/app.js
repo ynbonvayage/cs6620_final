@@ -16,24 +16,29 @@
 const API_BASE_URL = "https://2l8bpgmbji.execute-api.us-east-1.amazonaws.com";
 
 // ─── DOM References ─────────────────────────────────────────────────────────
-const $tbody         = document.getElementById("scans-tbody");
-const $repoFilter    = document.getElementById("repo-filter");
-const $refreshBtn    = document.getElementById("refresh-btn");
-const $scanCount     = document.getElementById("scan-count");
-const $statTotal     = document.getElementById("stat-total-value");
-const $statHigh      = document.getElementById("stat-high-value");
-const $statMedium    = document.getElementById("stat-medium-value");
-const $statLow       = document.getElementById("stat-low-value");
-const $modal         = document.getElementById("detail-modal");
-const $modalTitle    = document.getElementById("modal-title");
-const $modalBody     = document.getElementById("modal-body");
-const $modalClose    = document.getElementById("modal-close");
-const $connStatus    = document.getElementById("connection-status");
-const $toastContainer = document.getElementById("toast-container");
+const $tbody             = document.getElementById("scans-tbody");
+const $scanCount         = document.getElementById("scan-count");
+const $statTotal         = document.getElementById("stat-total-value");
+const $statHigh          = document.getElementById("stat-high-value");
+const $statMedium        = document.getElementById("stat-medium-value");
+const $statLow           = document.getElementById("stat-low-value");
+const $modal             = document.getElementById("detail-modal");
+const $modalTitle        = document.getElementById("modal-title");
+const $modalBody         = document.getElementById("modal-body");
+const $modalClose        = document.getElementById("modal-close");
+const $connStatus        = document.getElementById("connection-status");
+const $toastContainer    = document.getElementById("toast-container");
+
+// Subscribe Modal DOM References
+const $subscribeBtn      = document.getElementById("subscribe-btn");
+const $subscribeModal    = document.getElementById("subscribe-modal");
+const $subscribeClose    = document.getElementById("subscribe-modal-close");
+const $subscribeForm     = document.getElementById("subscribe-form");
+const $subSubmitBtn      = document.getElementById("sub-submit-btn");
 
 // ─── State ──────────────────────────────────────────────────────────────────
 let scans = [];
-let debounceTimer = null;
+let currentRepo = "";
 
 // ─── Init ───────────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
@@ -48,40 +53,53 @@ document.addEventListener("DOMContentLoaded", () => {
   const urlParams = new URLSearchParams(window.location.search);
   const repoParam = urlParams.get("repo");
   if (repoParam) {
-    $repoFilter.value = repoParam;
+    currentRepo = repoParam.trim();
   }
 
-  // Check if we have an initial filter value to query, otherwise prompt user
-  if ($repoFilter.value.trim()) {
+  // Check if we have a repo to query, otherwise prompt user
+  if (currentRepo) {
     loadScans();
   } else {
     setConnectionStatus("ok", "Connected");
     updateStats([]);
-    renderEmpty("Please enter a repository name above or use a URL link containing the '?repo=' parameter to view scan history.");
+    renderEmpty("No repository specified. Please access this page using a URL link containing the '?repo=' parameter (e.g. from your PR comment).");
   }
 
-  $refreshBtn.addEventListener("click", loadScans);
   $modalClose.addEventListener("click", closeModal);
   $modal.addEventListener("click", (e) => {
     if (e.target === $modal) closeModal();
   });
+
+  if ($subscribeBtn) {
+    $subscribeBtn.addEventListener("click", openSubscribeModal);
+  }
+  if ($subscribeClose) {
+    $subscribeClose.addEventListener("click", closeSubscribeModal);
+  }
+  if ($subscribeModal) {
+    $subscribeModal.addEventListener("click", (e) => {
+      if (e.target === $subscribeModal) closeSubscribeModal();
+    });
+  }
+
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closeModal();
+    if (e.key === "Escape") {
+      closeModal();
+      closeSubscribeModal();
+    }
   });
 
-  $repoFilter.addEventListener("input", () => {
-    clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => filterAndRender(), 300);
-  });
+  if ($subscribeForm) {
+    $subscribeForm.addEventListener("submit", handleSubscribeSubmit);
+  }
 });
 
 // ─── API Calls ──────────────────────────────────────────────────────────────
 
 async function loadScans() {
-  const repo = $repoFilter.value.trim();
-  if (!repo) {
+  if (!currentRepo) {
     updateStats([]);
-    renderEmpty("Please enter a repository name above or use a URL link containing the '?repo=' parameter to view scan history.");
+    renderEmpty("No repository specified. Please access this page using a URL link containing the '?repo=' parameter (e.g. from your PR comment).");
     return;
   }
 
@@ -89,7 +107,7 @@ async function loadScans() {
   renderLoading();
 
   try {
-    const url = `${API_BASE_URL}/api/scans?repo=${encodeURIComponent(repo)}`;
+    const url = `${API_BASE_URL}/api/scans?repo=${encodeURIComponent(currentRepo)}`;
 
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -292,12 +310,6 @@ function animateCounter(el, target) {
   requestAnimationFrame(step);
 }
 
-// ─── Filter ─────────────────────────────────────────────────────────────────
-
-function filterAndRender() {
-  loadScans();
-}
-
 // ─── Modal ──────────────────────────────────────────────────────────────────
 
 function openModal(title) {
@@ -309,6 +321,54 @@ function openModal(title) {
 function closeModal() {
   $modal.hidden = true;
   document.body.style.overflow = "";
+}
+
+// ─── Subscribe Modal ────────────────────────────────────────────────────────
+
+function openSubscribeModal() {
+  if ($subscribeModal) {
+    $subscribeModal.hidden = false;
+    document.body.style.overflow = "hidden";
+  }
+}
+
+function closeSubscribeModal() {
+  if ($subscribeModal) {
+    $subscribeModal.hidden = true;
+    document.body.style.overflow = "";
+  }
+}
+
+async function handleSubscribeSubmit(e) {
+  e.preventDefault();
+  const githubUsername = document.getElementById("sub-github-username").value.trim();
+  const email = document.getElementById("sub-email").value.trim();
+
+  if (!githubUsername || !email) return;
+
+  $subSubmitBtn.disabled = true;
+  $subSubmitBtn.textContent = "Subscribing...";
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/subscribe`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ githubUsername, email }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+    showToast("Verification email sent! Please check your mailbox to confirm.", "success");
+    $subscribeForm.reset();
+    closeSubscribeModal();
+  } catch (err) {
+    console.error("Subscription failed:", err);
+    showToast(`Subscription failed: ${err.message}`, "error");
+  } finally {
+    $subSubmitBtn.disabled = false;
+    $subSubmitBtn.textContent = "Subscribe";
+  }
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

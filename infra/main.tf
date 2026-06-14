@@ -101,4 +101,5 @@ module "dashboard" {
   api_id            = module.lambda.api_id
   api_execution_arn = module.lambda.api_execution_arn
   bucket_name       = local.frontend_bucket_name
+  vuln_topic_arn    = module.data.vuln_alerts_topic_arn
 }

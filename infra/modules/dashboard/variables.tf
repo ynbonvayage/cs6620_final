@@ -32,3 +32,8 @@ variable "bucket_name" {
   description = "S3 bucket name for frontend website hosting"
   type        = string
 }
+
+variable "vuln_topic_arn" {
+  description = "ARN of the SNS topic for vulnerability alerts"
+  type        = string
+}

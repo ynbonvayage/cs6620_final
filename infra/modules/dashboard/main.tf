@@ -24,6 +24,7 @@ resource "aws_lambda_function" "dashboard_api" {
     variables = {
       DYNAMODB_TABLE = var.dynamodb_table
       S3_BUCKET      = var.s3_bucket
+      VULN_TOPIC_ARN = var.vuln_topic_arn
     }
   }
 
@@ -54,6 +55,18 @@ resource "aws_apigatewayv2_route" "get_scan" {
 resource "aws_apigatewayv2_route" "get_report" {
   api_id    = var.api_id
   route_key = "GET /api/reports/{scanId}"
+  target    = "integrations/${aws_apigatewayv2_integration.dashboard.id}"
+}
+
+resource "aws_apigatewayv2_route" "subscribe" {
+  api_id    = var.api_id
+  route_key = "POST /api/subscribe"
+  target    = "integrations/${aws_apigatewayv2_integration.dashboard.id}"
+}
+
+resource "aws_apigatewayv2_route" "cors_subscribe" {
+  api_id    = var.api_id
+  route_key = "OPTIONS /api/subscribe"
   target    = "integrations/${aws_apigatewayv2_integration.dashboard.id}"
 }
 

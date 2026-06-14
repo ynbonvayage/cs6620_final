@@ -1,16 +1,18 @@
 import { DynamoDBClient, ScanCommand, QueryCommand, GetItemCommand } from "@aws-sdk/client-dynamodb";
 import { unmarshall } from "@aws-sdk/util-dynamodb";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { SNSClient, SubscribeCommand } from "@aws-sdk/client-sns";
 
 const dynamo = new DynamoDBClient({});
 const s3 = new S3Client({});
+const sns = new SNSClient({});
 
-const { DYNAMODB_TABLE, S3_BUCKET } = process.env;
+const { DYNAMODB_TABLE, S3_BUCKET, VULN_TOPIC_ARN } = process.env;
 
 const CORS_HEADERS = {
   "Content-Type": "application/json",
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
@@ -37,6 +39,11 @@ export const handler = async (event) => {
     // GET /api/reports/{scanId} — fetch full report from S3
     if (routeKey === "GET /api/reports/{scanId}") {
       return await getReport(event);
+    }
+
+    // POST /api/subscribe — subscribe email with filter policy
+    if (routeKey === "POST /api/subscribe") {
+      return await subscribeEmail(event);
     }
 
     return respond(404, { error: "Not found", routeKey });
@@ -136,4 +143,48 @@ function respond(statusCode, payload) {
     headers: CORS_HEADERS,
     body: JSON.stringify(payload),
   };
+}
+
+/**
+ * Initiates an SNS subscription for the given email with a filter policy
+ * on the GitHub username.
+ */
+async function subscribeEmail(event) {
+  if (!VULN_TOPIC_ARN) {
+    return respond(500, { error: "Vulnerability topic ARN not configured in environment" });
+  }
+
+  let body;
+  try {
+    body = typeof event.body === "string" ? JSON.parse(event.body) : (event.body ?? {});
+  } catch (e) {
+    return respond(400, { error: "Invalid JSON body" });
+  }
+
+  const { email, githubUsername } = body;
+  if (!email || !githubUsername) {
+    return respond(400, { error: "Missing email or githubUsername" });
+  }
+
+  try {
+    const filterPolicy = {
+      pr_author: [githubUsername.trim()]
+    };
+
+    const subscribeParams = {
+      TopicArn: VULN_TOPIC_ARN,
+      Protocol: "email",
+      Endpoint: email.trim(),
+      Attributes: {
+        FilterPolicy: JSON.stringify(filterPolicy)
+      }
+    };
+
+    await sns.send(new SubscribeCommand(subscribeParams));
+
+    return respond(200, { success: true, message: "Subscription initiated. Verification email sent." });
+  } catch (err) {
+    console.error("SNS subscribe failed:", err);
+    return respond(500, { error: "Failed to initiate subscription", detail: err.message });
+  }
 }

@@ -41,7 +41,8 @@ jobs:
           jq -n \
             --arg code "$(cat /tmp/code_raw.txt)" \
             --arg repo "${{ github.repository }}" \
-            '{"code": $code, "filename": "scan.js", "repo": $repo}' > /tmp/payload.json
+            --arg actor "${{ github.actor }}" \
+            '{"code": $code, "filename": "scan.js", "repo": $repo, "actor": $actor}' > /tmp/payload.json
 
           # Send payload from file — curl -d @file never mangles the content
           RESPONSE=$(curl -s -X POST "${{ secrets.AWS_LAMBDA_URL }}" \
