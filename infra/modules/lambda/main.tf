@@ -23,7 +23,7 @@ resource "aws_lambda_function" "sast_handler" {
       S3_BUCKET         = var.s3_bucket
       VULN_TOPIC_ARN    = var.vuln_topic_arn
       FAILURE_TOPIC_ARN = var.failure_topic_arn
-      DASHBOARD_URL     = "http://securegate-dev-frontend-1ee45719.s3-website-us-east-1.amazonaws.com"
+      DASHBOARD_URL     = var.dashboard_url
     }
   }
 

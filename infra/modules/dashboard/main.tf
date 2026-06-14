@@ -85,14 +85,8 @@ resource "aws_apigatewayv2_route" "cors_reports" {
   target    = "integrations/${aws_apigatewayv2_integration.dashboard.id}"
 }
 
-# --- S3 Static Website Hosting -----------------------------------------------
-
-resource "random_id" "frontend_suffix" {
-  byte_length = 4
-}
-
 resource "aws_s3_bucket" "frontend" {
-  bucket = "${var.name}-frontend-${random_id.frontend_suffix.hex}"
+  bucket = var.bucket_name
   tags   = { Name = "${var.name}-frontend" }
 }
 

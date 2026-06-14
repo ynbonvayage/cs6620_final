@@ -27,3 +27,8 @@ variable "api_execution_arn" {
   description = "API Gateway v2 execution ARN — used for Lambda permission"
   type        = string
 }
+
+variable "bucket_name" {
+  description = "S3 bucket name for frontend website hosting"
+  type        = string
+}

@@ -12,8 +12,14 @@ data "aws_caller_identity" "current" {}
 data "aws_partition" "current" {}
 
 
+resource "random_id" "frontend_suffix" {
+  byte_length = 4
+}
+
 locals {
-  name = "${var.project}-${var.env}"
+  name                 = "${var.project}-${var.env}"
+  frontend_bucket_name = "${local.name}-frontend-${random_id.frontend_suffix.hex}"
+  dashboard_url        = "http://${local.frontend_bucket_name}.s3-website-us-east-1.amazonaws.com"
 }
 
 module "data" {
@@ -63,6 +69,7 @@ module "lambda" {
   account_id        = data.aws_caller_identity.current.account_id
   vuln_topic_arn    = module.data.vuln_alerts_topic_arn
   failure_topic_arn = module.data.failure_alerts_topic_arn
+  dashboard_url     = local.dashboard_url
 }
 
 module "compute" {
@@ -93,4 +100,5 @@ module "dashboard" {
   account_id        = data.aws_caller_identity.current.account_id
   api_id            = module.lambda.api_id
   api_execution_arn = module.lambda.api_execution_arn
+  bucket_name       = local.frontend_bucket_name
 }

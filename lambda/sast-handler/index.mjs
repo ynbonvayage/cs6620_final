@@ -132,7 +132,7 @@ export const handler = async (event) => {
   }
 
   // GitHub Actions parses response.summary.high to decide pass/fail.
-  return respond(200, { scanId, createdAt, summary });
+  return respond(200, { scanId, createdAt, summary, dashboardUrl: DASHBOARD_URL });
 };
 
 /**

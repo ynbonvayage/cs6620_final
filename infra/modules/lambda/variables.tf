@@ -32,3 +32,8 @@ variable "failure_topic_arn" {
   description = "ARN of the SNS topic for scan-failure alerts"
   type        = string
 }
+
+variable "dashboard_url" {
+  description = "Dashboard website URL"
+  type        = string
+}
