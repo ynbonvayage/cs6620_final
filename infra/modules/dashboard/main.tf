@@ -148,7 +148,15 @@ resource "aws_s3_object" "style" {
 resource "aws_s3_object" "app" {
   bucket       = aws_s3_bucket.frontend.id
   key          = "app.js"
-  source       = "${path.root}/../frontend/app.js"
+  content      = replace(
+    file("${path.root}/../frontend/app.js"),
+    "/const API_BASE_URL = \".*\";/",
+    "const API_BASE_URL = \"https://${var.api_id}.execute-api.us-east-1.amazonaws.com\";"
+  )
   content_type = "application/javascript"
-  etag         = filemd5("${path.root}/../frontend/app.js")
+  etag         = md5(replace(
+    file("${path.root}/../frontend/app.js"),
+    "/const API_BASE_URL = \".*\";/",
+    "const API_BASE_URL = \"https://${var.api_id}.execute-api.us-east-1.amazonaws.com\";"
+  ))
 }
