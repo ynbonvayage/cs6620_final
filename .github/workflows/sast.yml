@@ -86,7 +86,7 @@ jobs:
             echo "**No HIGH severity vulnerabilities** — PR is clear to merge." >> /tmp/pr_comment.md
           fi
           echo "" >> /tmp/pr_comment.md
-          echo "🔍 **[点击此处在 Dashboard 中查看该仓库的完整扫描历史](http://securegate-dev-frontend-1ee45719.s3-website-us-east-1.amazonaws.com/?repo=${{ github.repository }})**" >> /tmp/pr_comment.md
+          echo "🔍 **[Click here to view the full scan history for this repository in the Dashboard](http://securegate-dev-frontend-1ee45719.s3-website-us-east-1.amazonaws.com/?repo=${{ github.repository }})**" >> /tmp/pr_comment.md
           echo "" >> /tmp/pr_comment.md
           echo "Scan ID: $SCAN_ID" >> /tmp/pr_comment.md
 
