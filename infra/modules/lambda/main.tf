@@ -18,9 +18,12 @@ resource "aws_lambda_function" "sast_handler" {
 
   environment {
     variables = {
-      SAST_URL       = "http://${var.sast_url}"
-      DYNAMODB_TABLE = var.dynamodb_table
-      S3_BUCKET      = var.s3_bucket
+      SAST_URL          = "http://${var.sast_url}"
+      DYNAMODB_TABLE    = var.dynamodb_table
+      S3_BUCKET         = var.s3_bucket
+      VULN_TOPIC_ARN    = var.vuln_topic_arn
+      FAILURE_TOPIC_ARN = var.failure_topic_arn
+      DASHBOARD_URL     = "http://securegate-dev-frontend-1ee45719.s3-website-us-east-1.amazonaws.com"
     }
   }
 

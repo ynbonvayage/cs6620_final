@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SecureGate — SAST Dashboard</title>
+  <meta name="description" content="SecureGate automated SAST scan dashboard. View security scan results, vulnerability reports, and severity breakdowns." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Header -->
+  <header id="app-header">
+    <div class="header-inner">
+      <div class="logo-group">
+        <div class="logo-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+        </div>
+        <h1>SecureGate</h1>
+        <span class="badge">SAST Dashboard</span>
+      </div>
+      <div class="header-actions">
+        <div id="connection-status" class="status-dot status-loading" title="Checking API connection…">
+          <span class="dot"></span>
+          <span class="status-text">Connecting…</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main id="app-main">
+    <!-- Stats Row -->
+    <section id="stats-row" class="stats-row">
+      <div class="stat-card" id="stat-total">
+        <div class="stat-icon stat-icon-total">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        </div>
+        <div class="stat-info">
+          <span class="stat-value" id="stat-total-value">—</span>
+          <span class="stat-label">Total Scans</span>
+        </div>
+      </div>
+      <div class="stat-card" id="stat-high">
+        <div class="stat-icon stat-icon-high">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </div>
+        <div class="stat-info">
+          <span class="stat-value" id="stat-high-value">—</span>
+          <span class="stat-label">HIGH Findings</span>
+        </div>
+      </div>
+      <div class="stat-card" id="stat-medium">
+        <div class="stat-icon stat-icon-medium">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
+        <div class="stat-info">
+          <span class="stat-value" id="stat-medium-value">—</span>
+          <span class="stat-label">MEDIUM Findings</span>
+        </div>
+      </div>
+      <div class="stat-card" id="stat-low">
+        <div class="stat-icon stat-icon-low">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+        </div>
+        <div class="stat-info">
+          <span class="stat-value" id="stat-low-value">—</span>
+          <span class="stat-label">LOW Findings</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Filter Bar -->
+    <section id="filter-bar" class="filter-bar">
+      <div class="filter-group">
+        <label for="repo-filter">Filter by Repository</label>
+        <div class="filter-input-wrapper">
+          <svg class="filter-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="repo-filter" placeholder="e.g. ynbonvayage/cs6620_final" autocomplete="off" />
+        </div>
+      </div>
+      <button id="refresh-btn" class="btn btn-primary" title="Refresh scan list">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        Refresh
+      </button>
+    </section>
+
+    <!-- Scans Table -->
+    <section id="scans-section" class="scans-section">
+      <div class="section-header">
+        <h2>Scan History</h2>
+        <span id="scan-count" class="scan-count"></span>
+      </div>
+      <div class="table-wrapper">
+        <table id="scans-table">
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Scan ID</th>
+              <th>Repository</th>
+              <th>File</th>
+              <th>HIGH</th>
+              <th>MEDIUM</th>
+              <th>LOW</th>
+              <th>Total</th>
+              <th>Date</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="scans-tbody">
+            <tr class="loading-row">
+              <td colspan="10">
+                <div class="loading-spinner"></div>
+                <span>Loading scans…</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- Detail Modal -->
+  <div id="detail-modal" class="modal-overlay" hidden>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modal-title">Scan Details</h2>
+        <button id="modal-close" class="btn-icon" title="Close">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div id="modal-body" class="modal-body">
+        <div class="loading-spinner"></div>
+        <span>Loading report…</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

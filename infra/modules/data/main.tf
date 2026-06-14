@@ -169,3 +169,159 @@ resource "aws_cloudwatch_metric_alarm" "unhealthy_hosts" {
 
   tags = { Name = "${var.name}-unhealthy-hosts" }
 }
+
+###############################################################################
+# CloudWatch alarm: fires when the SAST Lambda function errors
+###############################################################################
+
+resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
+  alarm_name          = "${var.name}-lambda-errors"
+  alarm_description   = "SAST Lambda function is throwing errors — scans may be failing."
+  namespace           = "AWS/Lambda"
+  metric_name         = "Errors"
+  statistic           = "Sum"
+  period              = 60
+  evaluation_periods  = 2
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = var.lambda_function_name
+  }
+
+  alarm_actions = [aws_sns_topic.failure_alerts.arn]
+  ok_actions    = [aws_sns_topic.failure_alerts.arn]
+
+  tags = { Name = "${var.name}-lambda-errors" }
+}
+
+###############################################################################
+# CloudWatch Dashboard: SecureGate operational overview
+###############################################################################
+
+resource "aws_cloudwatch_dashboard" "securegate" {
+  dashboard_name = "${var.name}-dashboard"
+
+  dashboard_body = jsonencode({
+    widgets = [
+      {
+        type   = "text"
+        x      = 0
+        y      = 0
+        width  = 24
+        height = 1
+        properties = {
+          markdown = "# SecureGate — Operational Dashboard"
+        }
+      },
+      {
+        type   = "metric"
+        x      = 0
+        y      = 1
+        width  = 8
+        height = 6
+        properties = {
+          title  = "Lambda Invocations"
+          region = "us-east-1"
+          metrics = [
+            ["AWS/Lambda", "Invocations", "FunctionName", var.lambda_function_name, { stat = "Sum", period = 300 }]
+          ]
+          view = "timeSeries"
+        }
+      },
+      {
+        type   = "metric"
+        x      = 8
+        y      = 1
+        width  = 8
+        height = 6
+        properties = {
+          title  = "Lambda Errors"
+          region = "us-east-1"
+          metrics = [
+            ["AWS/Lambda", "Errors", "FunctionName", var.lambda_function_name, { stat = "Sum", period = 300, color = "#d62728" }]
+          ]
+          view = "timeSeries"
+        }
+      },
+      {
+        type   = "metric"
+        x      = 16
+        y      = 1
+        width  = 8
+        height = 6
+        properties = {
+          title  = "Lambda Duration (ms)"
+          region = "us-east-1"
+          metrics = [
+            ["AWS/Lambda", "Duration", "FunctionName", var.lambda_function_name, { stat = "Average", period = 300 }],
+            ["AWS/Lambda", "Duration", "FunctionName", var.lambda_function_name, { stat = "p99", period = 300, color = "#ff7f0e" }]
+          ]
+          view = "timeSeries"
+        }
+      },
+      {
+        type   = "metric"
+        x      = 0
+        y      = 7
+        width  = 12
+        height = 6
+        properties = {
+          title  = "ALB Healthy Host Count"
+          region = "us-east-1"
+          metrics = [
+            ["AWS/ApplicationELB", "HealthyHostCount", "TargetGroup", local.tg_dimension, "LoadBalancer", local.alb_dimension, { stat = "Minimum", period = 60 }]
+          ]
+          view = "timeSeries"
+        }
+      },
+      {
+        type   = "metric"
+        x      = 12
+        y      = 7
+        width  = 12
+        height = 6
+        properties = {
+          title  = "ALB Request Count"
+          region = "us-east-1"
+          metrics = [
+            ["AWS/ApplicationELB", "RequestCount", "LoadBalancer", local.alb_dimension, { stat = "Sum", period = 300 }]
+          ]
+          view = "timeSeries"
+        }
+      },
+      {
+        type   = "metric"
+        x      = 0
+        y      = 13
+        width  = 12
+        height = 6
+        properties = {
+          title  = "DynamoDB Scans — Consumed Read/Write"
+          region = "us-east-1"
+          metrics = [
+            ["AWS/DynamoDB", "ConsumedReadCapacityUnits", "TableName", aws_dynamodb_table.scans.name, { stat = "Sum", period = 300 }],
+            ["AWS/DynamoDB", "ConsumedWriteCapacityUnits", "TableName", aws_dynamodb_table.scans.name, { stat = "Sum", period = 300, color = "#ff7f0e" }]
+          ]
+          view = "timeSeries"
+        }
+      },
+      {
+        type   = "metric"
+        x      = 12
+        y      = 13
+        width  = 12
+        height = 6
+        properties = {
+          title  = "S3 Reports — Total Requests"
+          region = "us-east-1"
+          metrics = [
+            ["AWS/S3", "AllRequests", "BucketName", aws_s3_bucket.reports.bucket, "FilterId", "EntireBucket", { stat = "Sum", period = 300 }]
+          ]
+          view = "timeSeries"
+        }
+      }
+    ]
+  })
+}

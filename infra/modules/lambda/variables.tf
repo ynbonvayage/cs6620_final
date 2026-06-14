@@ -22,3 +22,13 @@ variable "account_id" {
   description = "AWS account ID — used to build the LabRole ARN"
   type        = string
 }
+
+variable "vuln_topic_arn" {
+  description = "ARN of the SNS topic for HIGH-severity vulnerability alerts"
+  type        = string
+}
+
+variable "failure_topic_arn" {
+  description = "ARN of the SNS topic for scan-failure alerts"
+  type        = string
+}

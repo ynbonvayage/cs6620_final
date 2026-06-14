@@ -19,10 +19,11 @@ locals {
 module "data" {
   source = "./modules/data"
 
-  name             = local.name
-  alert_email      = var.alert_email
-  target_group_arn = module.network.target_group_arn
-  alb_arn          = module.network.alb_arn
+  name                 = local.name
+  alert_email          = var.alert_email
+  target_group_arn     = module.network.target_group_arn
+  alb_arn              = module.network.alb_arn
+  lambda_function_name = "${local.name}-sast-handler"
 }
 
 module "network" {
@@ -55,11 +56,13 @@ module "iam" {
 module "lambda" {
   source = "./modules/lambda"
 
-  name           = local.name
-  sast_url       = module.network.alb_dns_name
-  dynamodb_table = module.data.scans_table
-  s3_bucket      = module.data.reports_bucket
-  account_id     = data.aws_caller_identity.current.account_id
+  name              = local.name
+  sast_url          = module.network.alb_dns_name
+  dynamodb_table    = module.data.scans_table
+  s3_bucket         = module.data.reports_bucket
+  account_id        = data.aws_caller_identity.current.account_id
+  vuln_topic_arn    = module.data.vuln_alerts_topic_arn
+  failure_topic_arn = module.data.failure_alerts_topic_arn
 }
 
 module "compute" {
@@ -79,4 +82,15 @@ module "compute" {
   instance_sg_id       = module.network.instance_sg_id
   target_group_arn     = module.network.target_group_arn
   instance_profile_arn = module.iam.instance_profile_arn
+}
+
+module "dashboard" {
+  source = "./modules/dashboard"
+
+  name              = local.name
+  dynamodb_table    = module.data.scans_table
+  s3_bucket         = module.data.reports_bucket
+  account_id        = data.aws_caller_identity.current.account_id
+  api_id            = module.lambda.api_id
+  api_execution_arn = module.lambda.api_execution_arn
 }
