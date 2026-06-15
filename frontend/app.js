@@ -246,7 +246,7 @@ function renderReport(report) {
         <div class="vuln-card vuln-${sev}">
           <div class="vuln-card-header">
             ${severityBadge(sev, 1, true)}
-            <span class="vuln-type">${escapeHtml(v.type || v.rule || "Unknown")}</span>
+            <span class="vuln-type">${escapeHtml(v.name || v.id || v.type || "Unknown")}</span>
           </div>
           <div class="vuln-card-body">
             <p>${escapeHtml(v.message || v.description || "No description available.")}</p>
