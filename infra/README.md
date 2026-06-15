@@ -1,8 +1,5 @@
 # SecureGate — Infrastructure (Terraform)
 
-**Owner:** Rong Huang (Group 03) · Role **B — Infrastructure + IaC**
-**Course:** CS6620 Cloud Computing · Summer 2026
-
 This is the Infrastructure-as-Code layer for SecureGate, a cloud-native security
 gateway. Everything below is created from a single `terraform apply` — no manual
 console clicking.
