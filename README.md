@@ -48,24 +48,33 @@ API Gateway → Lambda dashboard-api → DynamoDB + S3 → S3 static frontend
 ## Team Responsibilities
 
 **Member A — Na Yin (SAST Pipeline + Data Layer)**
-- Lambda orchestrator: receives scan requests via API Gateway, calls EC2 scanner, persists results to DynamoDB + S3, returns scan summary
-- API Gateway v2: replaced Lambda Function URL to bypass Learner Lab SCP restriction
-- GitHub Actions workflow: differential scan (only changed JS files), jq-based JSON encoding, PR comment with severity table, exit codes for blocked/pass/error states
-- Data layer design: DynamoDB table schema (partition key + GSI for repo queries), S3 lifecycle policy
-- CloudWatch alarm + SNS failure-alerts: notifies when all EC2 instances go unhealthy
+
+| Component | Description |
+|-----------|-------------|
+| `lambda/sast-handler` | Receives scan requests via API Gateway, calls EC2 scanner via ALB, persists results to DynamoDB + S3, returns scan summary |
+| `API Gateway v2` | Replaced Lambda Function URL — Learner Lab SCP blocks `InvokeFunctionUrl` from outside AWS |
+| `sast.yml` | GitHub Actions workflow: differential scan (only changed JS files), jq JSON encoding, PR comment with severity table, exit 1 (HIGH found) / exit 2 (scanner down) |
+| `data layer` | DynamoDB table schema (`scan_id` PK + GSI `repo-created_at-index`), S3 reports bucket with lifecycle policy |
+| `monitoring` | CloudWatch alarm (`HealthyHostCount < 1`) + SNS `failure-alerts` → email when all EC2 instances go unhealthy |
 
 **Member B — Rong Huang (Infrastructure)**
-- Network: VPC, public/private subnets across 2 AZs, Internet Gateway, NAT Gateway
-- Compute: ALB (internet-facing), EC2 Auto Scaling Group with rolling refresh and CPU-based scaling
-- Security: security group chain (ALB → EC2), IMDSv2 enforced on instances
-- Storage: DynamoDB tables, S3 reports bucket (encryption, versioning, lifecycle), SNS topics
-- All Terraform modules (network / compute / iam / data / lambda / dashboard)
+
+| Module | Resources |
+|--------|-----------|
+| `network` | VPC (10.0.0.0/16), 2 public + 2 private subnets across 2 AZs, IGW, NAT Gateway, ALB (internet-facing, port 80), security groups |
+| `compute` | Launch template (Amazon Linux 2023, IMDSv2 enforced), ASG (desired 2, min 1, max 3, CPU 60% scale-out), rolling instance refresh |
+| `iam` | Uses pre-provisioned `LabInstanceProfile` (Academy blocks `iam:CreateRole`) |
+| `data` | DynamoDB tables (`scans` + `repos`), S3 reports bucket (encryption, versioning, lifecycle), SNS `vuln-alerts` + `failure-alerts` |
+| `dashboard` | S3 frontend bucket, static website hosting, API Gateway routes (Terraform provisioning) |
 
 **Member C — Hao Ding (Scanner + Dashboard)**
-- SAST scanner: Node.js Express server on EC2, 11 vulnerability rule categories (regex-based), Docker image on Docker Hub
-- Dashboard API Lambda: reads scan history from DynamoDB, fetches full reports from S3, enforces per-repo isolation
-- Frontend dashboard: S3 static website, scan history table, vulnerability report modal
-- HIGH vulnerability alerts: SNS vuln-alerts topic → email when HIGH severity issues are detected
+
+| Component | Description |
+|-----------|-------------|
+| `sast/backend` | Node.js Express server on EC2 (Docker), 11 vulnerability rule categories (regex-based), `/health` endpoint for ALB health checks |
+| `lambda/dashboard-api` | Reads scan history from DynamoDB via GSI, fetches full reports from S3, enforces per-repo isolation (no full-table scans) |
+| `frontend/` | S3 static website: scan history table, vulnerability report modal with type / severity / line / evidence |
+| `SNS vuln-alerts` | Email notification when HIGH severity vulnerabilities are detected in a scan |
 
 ---
 
